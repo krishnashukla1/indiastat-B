@@ -9,53 +9,110 @@ const { parseCSVFromFile, parseXlsxFromFile, safeDeleteFile } = require('../util
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 
+// async function uploadDataset(req, res) {
+//   try {
+//     // multer puts file info in req.file
+//     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+//     const filePath = req.file.path;
+//     const originalName = req.file.originalname.toLowerCase();
+//     let rows = [];
+
+//     if (originalName.endsWith('.csv') || req.file.mimetype === 'text/csv') {
+//       rows = await parseCSVFromFile(filePath);
+//     } else if (originalName.endsWith('.xlsx') || originalName.endsWith('.xls')) {
+//       rows = parseXlsxFromFile(filePath);
+//     } else if (originalName.endsWith('.json') || req.file.mimetype === 'application/json') {
+//       const raw = fs.readFileSync(filePath, 'utf8');
+//       rows = JSON.parse(raw);
+//       if (!Array.isArray(rows)) rows = [rows];
+//     } else {
+//       // unsupported: keep file but return error
+//       safeDeleteFile(filePath);
+//       return res.status(400).json({ message: 'Unsupported file type' });
+//     }
+
+//     const preview = rows.slice(0, 10);
+//     const dataset = new Dataset({
+//       title: req.body.title || req.file.originalname,
+//       description: req.body.description || '',
+//       category: req.body.category || 'General',
+//       tags: req.body.tags ? String(req.body.tags).split(',').map(t => t.trim()) : [],
+//       year: req.body.year ? Number(req.body.year) : undefined,
+//       formats: [path.extname(originalName).replace('.','')],
+//       filePath: req.file.filename, // only filename; served from /uploads
+//       fileOriginalName: req.file.originalname,
+//       preview,
+//       recordsCount: rows.length,
+//       createdBy: req.user ? req.user._id : null,
+//       isPremium: req.body.isPremium === 'true' || req.body.isPremium === true
+//     });
+
+//     await dataset.save();
+
+//     res.json({ message: 'Upload successful', dataset });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: 'Upload failed' });
+//   }
+// }
+
 async function uploadDataset(req, res) {
   try {
-    // multer puts file info in req.file
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
 
     const filePath = req.file.path;
     const originalName = req.file.originalname.toLowerCase();
     let rows = [];
 
-    if (originalName.endsWith('.csv') || req.file.mimetype === 'text/csv') {
+    if (originalName.endsWith('.csv')) {
       rows = await parseCSVFromFile(filePath);
+
     } else if (originalName.endsWith('.xlsx') || originalName.endsWith('.xls')) {
-      rows = parseXlsxFromFile(filePath);
-    } else if (originalName.endsWith('.json') || req.file.mimetype === 'application/json') {
+      rows = await parseXlsxFromFile(filePath);
+
+    } else if (originalName.endsWith('.json')) {
       const raw = fs.readFileSync(filePath, 'utf8');
       rows = JSON.parse(raw);
       if (!Array.isArray(rows)) rows = [rows];
+
     } else {
-      // unsupported: keep file but return error
       safeDeleteFile(filePath);
       return res.status(400).json({ message: 'Unsupported file type' });
     }
 
-    const preview = rows.slice(0, 10);
     const dataset = new Dataset({
       title: req.body.title || req.file.originalname,
       description: req.body.description || '',
       category: req.body.category || 'General',
-      tags: req.body.tags ? String(req.body.tags).split(',').map(t => t.trim()) : [],
+      tags: req.body.tags ? req.body.tags.split(',').map(t => t.trim()) : [],
       year: req.body.year ? Number(req.body.year) : undefined,
-      formats: [path.extname(originalName).replace('.','')],
-      filePath: req.file.filename, // only filename; served from /uploads
+      formats: [path.extname(originalName).replace('.', '')],
+      filePath: req.file.filename,            // ONLY filename
       fileOriginalName: req.file.originalname,
-      preview,
+      preview: rows.slice(0, 10),
       recordsCount: rows.length,
-      createdBy: req.user ? req.user._id : null,
-      isPremium: req.body.isPremium === 'true' || req.body.isPremium === true
+      createdBy: req.user?._id || null,
+      isPremium: req.body.isPremium === 'true'
     });
 
     await dataset.save();
 
-    res.json({ message: 'Upload successful', dataset });
+    res.json({
+      message: 'Upload successful',
+      dataset
+    });
+
   } catch (err) {
     console.error(err);
+    if (req.file) safeDeleteFile(req.file.path);
     res.status(500).json({ message: 'Upload failed' });
   }
 }
+
+
 
 async function listDatasets(req, res) {
   // supports pagination & search & filters
